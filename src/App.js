@@ -1,70 +1,61 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  ChevronRight, Home, Folder, Package, Search, ArrowLeft
+  ChevronRight, Home, Folder, Package,
+  Settings, Eye, Trash2, FolderPlus, Tag, ListPlus,
+  CheckCircle2, ArrowLeft, ExternalLink, Plus
 } from 'lucide-react';
 
-// --- ГЕНЕРАТОР БОЛЬШОЙ БАЗЫ ДАННЫХ ---
-const generateMassiveData = () => {
-  const categories = [];
-  const ads = [];
-  let catIdCounter = 1;
-  let adIdCounter = 1;
-
-  const rootNames = ["Электроника", "Транспорт", "Недвижимость", "Дом и Сад", "Услуги"];
-  const subNames = ["Альфа", "Бета", "Гамма", "Дельта", "Эпсилон"];
-  const leafNames = ["Модель А", "Модель B", "Модель C", "Модель D", "Модель E"];
-
-  rootNames.forEach(rootName => {
-    const rootId = catIdCounter++;
-    categories.push({ id: rootId, name: rootName, parent_id: null });
-
-    subNames.forEach(subName => {
-      const subId = catIdCounter++;
-      categories.push({ id: subId, name: `${rootName} - ${subName}`, parent_id: rootId });
-
-      leafNames.forEach(leafName => {
-        const leafId = catIdCounter++;
-        categories.push({ id: leafId, name: `${subName} ${leafName}`, parent_id: subId });
-
-        for (let i = 1; i <= 3; i++) {
-          ads.push({
-            id: adIdCounter++,
-            category_id: leafId,
-            title: `Товар #${adIdCounter} (${leafName})`,
-            price: Math.floor(Math.random() * 100000) + 1000,
-            attributes: { "Артикул": `ABC-${adIdCounter}`, "Наличие": "Склад" }
-          });
-        }
-      });
-    });
-  });
-
-  return { categories, ads };
+// --- ИНИЦИАЛЬНЫЕ ДАННЫЕ ---
+const generateInitialData = () => {
+  const categories = [
+    {
+      id: 1,
+      name: "Электроника",
+      parent_id: null,
+      attributesConfig: []
+    },
+    {
+      id: 2,
+      name: "Смартфоны",
+      parent_id: 1,
+      attributesConfig: [
+        { name: "Бренд", options: ["Apple", "Samsung", "Xiaomi"] },
+        { name: "Память", options: ["128GB", "256GB", "512GB"] }
+      ]
+    }
+  ];
+  return { categories, ads: [] };
 };
 
 export default function App() {
-  // --- ИНИЦИАЛИЗАЦИЯ ---
-  const [categories] = useState(() => {
-    const saved = localStorage.getItem('db_categories');
-    if (saved) return JSON.parse(saved);
-    const data = generateMassiveData();
-    localStorage.setItem('db_categories', JSON.stringify(data.categories));
-    localStorage.setItem('db_ads', JSON.stringify(data.ads));
-    return data.categories;
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [categories, setCategories] = useState(() => {
+    const saved = localStorage.getItem('db_categories_v6');
+    return saved ? JSON.parse(saved) : generateInitialData().categories;
   });
 
-  const [ads] = useState(() => {
-    const saved = localStorage.getItem('db_ads');
+  const [ads, setAds] = useState(() => {
+    const saved = localStorage.getItem('db_ads_v6');
     return saved ? JSON.parse(saved) : [];
   });
 
   const [currentId, setCurrentId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedAdId, setSelectedAdId] = useState(null);
 
-  // --- ЛОГИКА ---
+  useEffect(() => {
+    localStorage.setItem('db_categories_v6', JSON.stringify(categories));
+    localStorage.setItem('db_ads_v6', JSON.stringify(ads));
+  }, [categories, ads]);
+
+  // Хелперы
   const subCats = useMemo(() => categories.filter(c => c.parent_id === currentId), [categories, currentId]);
   const currentAds = useMemo(() => ads.filter(a => a.category_id === currentId), [ads, currentId]);
-  const isLeaf = subCats.length === 0 && currentId !== null;
+  const currentCategory = useMemo(() => categories.find(c => c.id === currentId), [categories, currentId]);
+  const selectedAd = useMemo(() => ads.find(a => a.id === selectedAdId), [ads, selectedAdId]);
+
+  const hasAttributes = currentCategory?.attributesConfig && currentCategory.attributesConfig.length > 0;
+  const canCreateSubCategory = !hasAttributes;
+  const canCreateAd = hasAttributes;
 
   const breadcrumbs = useMemo(() => {
     const path = [];
@@ -76,134 +67,249 @@ export default function App() {
     return path;
   }, [currentId, categories]);
 
-  const filteredAds = useMemo(() => {
-    if (!searchQuery) return [];
-    return ads.filter(ad => ad.title.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 20);
-  }, [searchQuery, ads]);
-
-  const goBack = () => {
-    if (currentId === null) return;
-    const current = categories.find(c => c.id === currentId);
-    setCurrentId(current ? current.parent_id : null);
+  // --- ACTIONS ---
+  const createCategory = () => {
+    if (!isAdmin) return; // Только для админа
+    const name = prompt("Название категории:");
+    if (!name) return;
+    const isLeaf = window.confirm("Это конечная категория с фиксированными значениями?");
+    let attributesConfig = [];
+    if (isLeaf) {
+      const attrsRaw = prompt("Формат: Цвет:Красный,Синий;Размер:S,M,L");
+      if (attrsRaw) {
+        attributesConfig = attrsRaw.split(';').map(part => {
+          const [attrName, optionsRaw] = part.split(':');
+          return { name: attrName.trim(), options: optionsRaw ? optionsRaw.split(',').map(o => o.trim()) : [] };
+        });
+      }
+    }
+    setCategories([...categories, { id: Date.now(), name, parent_id: currentId, attributesConfig }]);
   };
 
-  return (
-      <div className="min-h-screen bg-slate-100 p-4 md:p-8 font-sans">
-        <div className="max-w-2xl mx-auto">
+  const createAd = () => {
+    // Теперь доступно и в обычном режиме
+    const title = prompt("Название товара:");
+    const price = parseInt(prompt("Цена:"), 10);
+    if (!title || isNaN(price)) return;
+    const dynamicAttributes = {};
+    for (const attr of currentCategory.attributesConfig) {
+      if (attr.options.length > 0) {
+        const optionsList = attr.options.map((opt, i) => `${i + 1}. ${opt}`).join('\n');
+        const choice = prompt(`Выберите "${attr.name}":\n${optionsList}`);
+        const index = parseInt(choice, 10) - 1;
+        dynamicAttributes[attr.name] = attr.options[index] || attr.options[0];
+      } else {
+        dynamicAttributes[attr.name] = prompt(`Введите "${attr.name}":`) || "—";
+      }
+    }
+    setAds([...ads, { id: Date.now(), category_id: currentId, title, price, attributes: dynamicAttributes }]);
+  };
 
-          {/* ПОИСК */}
-          <div className="relative mb-6">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-                type="text"
-                placeholder="Поиск по товарам..."
-                className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl shadow-sm border-none focus:ring-2 focus:ring-blue-500 outline-none"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-                <div className="absolute top-16 left-0 w-full bg-white rounded-2xl shadow-xl z-50 p-2 border border-slate-100 max-h-96 overflow-y-auto">
-                  {filteredAds.length > 0 ? filteredAds.map(ad => (
-                      <div
-                          key={ad.id}
-                          onClick={() => { setCurrentId(ad.category_id); setSearchQuery(""); }}
-                          className="p-3 hover:bg-slate-50 rounded-xl cursor-pointer flex justify-between items-center"
-                      >
-                        <span className="font-medium text-slate-700">{ad.title}</span>
-                        <span className="text-blue-600 font-bold">{ad.price.toLocaleString()} ₽</span>
-                      </div>
-                  )) : <div className="p-4 text-center text-gray-400 text-sm">Ничего не найдено</div>}
-                </div>
-            )}
-          </div>
+  // --- RENDERING ---
 
-          {/* НАВИГАЦИЯ */}
-          <div className="flex items-center gap-2 mb-6">
-            <button
-                onClick={goBack}
-                disabled={currentId === null}
-                className="p-3 bg-white rounded-xl shadow-sm hover:bg-slate-50 disabled:opacity-30 transition-all active:scale-95"
-            >
-              <ArrowLeft size={20} className="text-slate-600" />
+  // Карточка товара
+  if (selectedAd) {
+    return (
+        <div className={`min-h-screen p-4 md:p-8 ${isAdmin ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'}`}>
+          <div className="max-w-4xl mx-auto">
+            <button onClick={() => setSelectedAdId(null)} className="flex items-center gap-2 mb-8 opacity-60 hover:opacity-100 transition-all font-black uppercase text-xs tracking-widest">
+              <ArrowLeft size={18} /> Вернуться в каталог
             </button>
 
-            <nav className="flex-1 flex items-center gap-2 text-sm bg-white p-3 rounded-xl shadow-sm overflow-x-auto whitespace-nowrap scrollbar-hide">
-              <button onClick={() => setCurrentId(null)} className="p-1 hover:text-blue-600 transition-colors text-slate-400"><Home size={18}/></button>
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-12 p-10 rounded-[48px] shadow-2xl ${isAdmin ? 'bg-slate-800' : 'bg-white'}`}>
+              <div className="aspect-square bg-slate-100 rounded-[32px] flex items-center justify-center text-slate-300 border-4 border-white">
+                <Package size={140} strokeWidth={1} />
+              </div>
+              <div className="flex flex-col">
+                <span className="bg-blue-600 text-white self-start px-3 py-1 rounded-full font-black uppercase tracking-tighter text-[9px] mb-4">Product Unit</span>
+                <h1 className="text-5xl font-black mb-2 tracking-tighter leading-none">{selectedAd.title}</h1>
+                <div className="text-4xl font-black text-blue-600 mb-10 tracking-tight">{selectedAd.price.toLocaleString()} ₽</div>
+
+                <div className="space-y-2 mt-auto">
+                  <p className="font-black text-[10px] opacity-30 uppercase tracking-[0.2em] mb-4">Specifications</p>
+                  {Object.entries(selectedAd.attributes).map(([k, v]) => (
+                      <div key={k} className={`flex justify-between items-center p-5 rounded-3xl border ${isAdmin ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
+                        <span className="opacity-40 font-bold text-sm uppercase tracking-tight">{k}</span>
+                        <span className="font-black text-blue-500">{v}</span>
+                      </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+    );
+  }
+
+  return (
+      <div className={`min-h-screen p-4 md:p-8 font-sans ${isAdmin ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+        <div className="max-w-6xl mx-auto">
+
+          {/* HEADER */}
+          <header className="flex justify-between items-center mb-10">
+            <div className="flex flex-col">
+              <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none">Store<span className="text-blue-500">Pro</span></h1>
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] opacity-40 mt-1">Data Management System</span>
+            </div>
+            <button
+                onClick={() => setIsAdmin(!isAdmin)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                    isAdmin ? 'bg-blue-600 text-white' : 'bg-white text-slate-900 shadow-sm border'
+                }`}
+            >
+              {isAdmin ? <><Eye size={14}/> View Mode</> : <><Settings size={14}/> Admin Panel</>}
+            </button>
+          </header>
+
+          {/* NAVIGATION */}
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center mb-8">
+            <nav className={`flex-1 flex items-center gap-2 text-sm p-3.5 rounded-3xl shadow-sm overflow-x-auto ${isAdmin ? 'bg-slate-800' : 'bg-white'}`}>
+              <button onClick={() => setCurrentId(null)} className="p-1.5 opacity-40 hover:opacity-100 hover:text-blue-500 transition-all"><Home size={20}/></button>
               {breadcrumbs.map(bc => (
                   <React.Fragment key={bc.id}>
-                    <ChevronRight size={14} className="text-slate-300 flex-shrink-0" />
-                    <button onClick={() => setCurrentId(bc.id)} className="hover:text-blue-600 px-1 font-medium text-slate-600">{bc.name}</button>
+                    <ChevronRight size={14} className="opacity-20 flex-shrink-0" />
+                    <button onClick={() => setCurrentId(bc.id)} className="hover:text-blue-500 px-2 font-black tracking-tight whitespace-nowrap">{bc.name}</button>
                   </React.Fragment>
               ))}
             </nav>
+
+            {/* Кнопка добавления товара в режиме ПРОСМОТРА */}
+            {canCreateAd && !isAdmin && (
+                <button
+                    onClick={createAd}
+                    className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3.5 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-blue-500 shadow-lg shadow-blue-500/20 transition-all active:scale-95"
+                >
+                  <Plus size={18} /> Добавить товар
+                </button>
+            )}
           </div>
 
-          {/* СПИСОК КАТЕГОРИЙ */}
-          <div className="mb-8">
-            <div className="flex justify-between items-end mb-4 px-1">
-              <h2 className="text-2xl font-black text-slate-800 tracking-tight leading-none">
-                {currentId ? categories.find(c => c.id === currentId)?.name : "Каталог"}
-              </h2>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-              {subCats.length > 0 ? `${subCats.length} разделов` : "Товары"}
-            </span>
-            </div>
-
-            <div className="grid gap-2">
-              {subCats.map(cat => (
-                  <button
-                      key={cat.id}
-                      onClick={() => setCurrentId(cat.id)}
-                      className="w-full flex items-center justify-between p-5 bg-white rounded-2xl hover:shadow-md transition-all border border-transparent hover:border-blue-100 text-left group"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-slate-50 rounded-lg text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
-                        <Folder size={20} />
-                      </div>
-                      <span className="font-bold text-slate-700 group-hover:text-slate-900 transition-colors">{cat.name}</span>
-                    </div>
-                    <ChevronRight className="text-slate-300 group-hover:translate-x-1 transition-transform" />
-                  </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ОБЪЯВЛЕНИЯ (ЛИСТ) */}
-          {isLeaf && (
-              <div className="space-y-4">
-                {currentAds.length > 0 ? currentAds.map(ad => (
-                    <div key={ad.id} className="p-6 bg-white rounded-3xl shadow-sm border border-slate-100 hover:shadow-lg transition-all">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-extrabold text-xl text-slate-800">{ad.title}</h3>
-                          <div className="flex gap-2 mt-3">
-                            {Object.entries(ad.attributes).map(([k,v]) => (
-                                <span key={k} className="px-2 py-1 bg-slate-100 rounded text-[9px] font-black text-slate-500 uppercase tracking-tighter">
-                          {k}: {v}
-                        </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="text-2xl font-black text-blue-600 leading-none">
-                          {ad.price.toLocaleString()} ₽
-                        </div>
-                      </div>
-                    </div>
-                )) : (
-                    <div className="text-center py-12 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-                      <Package className="mx-auto text-slate-200 mb-2" size={48} />
-                      <p className="text-slate-400 font-bold">В этой категории нет товаров</p>
-                    </div>
+          {/* ADMIN ACTIONS */}
+          {isAdmin && (
+              <div className="flex gap-3 mb-8">
+                {canCreateSubCategory && (
+                    <button onClick={createCategory} className="flex-1 flex items-center justify-center gap-3 bg-slate-700 p-5 rounded-3xl font-black text-[10px] uppercase tracking-widest text-white hover:bg-slate-600 transition-all">
+                      <FolderPlus size={20} /> Создать новую подкатегорию
+                    </button>
+                )}
+                {canCreateAd && (
+                    <button onClick={createAd} className="flex-1 flex items-center justify-center gap-3 bg-blue-600 p-5 rounded-3xl font-black text-[10px] uppercase tracking-widest text-white hover:bg-blue-500 transition-all">
+                      <ListPlus size={20} /> Новый товар по шаблону
+                    </button>
                 )}
               </div>
           )}
 
-          {/* СЕРВИСНАЯ ИНФОРМАЦИЯ */}
-          <div className="mt-20 text-center border-t border-slate-200 pt-10">
-            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
-              Режим просмотра базы данных
-            </p>
+          {/* CONTENT */}
+          <div className="mb-4 flex items-end justify-between px-2">
+            <h2 className="text-4xl font-black tracking-tighter">
+              {currentCategory ? currentCategory.name : "Главный каталог"}
+            </h2>
+            {canCreateAd && (
+                <span className="text-[10px] font-black opacity-30 uppercase tracking-[0.2em]">Items: {currentAds.length}</span>
+            )}
           </div>
+
+          {/* CATEGORIES GRID */}
+          {!hasAttributes && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                {subCats.map(cat => (
+                    <button
+                        key={cat.id}
+                        onClick={() => setCurrentId(cat.id)}
+                        className={`flex items-center justify-between p-7 rounded-[36px] transition-all border-2 border-transparent text-left relative group ${
+                            isAdmin ? 'bg-slate-800 hover:border-slate-600' : 'bg-white hover:shadow-2xl hover:border-blue-500/10'
+                        }`}
+                    >
+                      <div className="flex items-center gap-5">
+                        <div className={`p-4 rounded-[24px] ${cat.attributesConfig?.length > 0 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-100 text-slate-400'}`}>
+                          {cat.attributesConfig?.length > 0 ? <Tag size={24}/> : <Folder size={24}/>}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-black text-xl tracking-tight leading-tight">{cat.name}</span>
+                          <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest mt-1">
+                        {cat.attributesConfig?.length > 0 ? 'Terminal Leaf' : 'Group Folder'}
+                    </span>
+                        </div>
+                      </div>
+                      {isAdmin && (
+                          <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Удалить?")) setCategories(categories.filter(c => c.id !== cat.id)) }} className="absolute -right-1 -top-1 p-2.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 shadow-xl transition-all scale-75 group-hover:scale-100">
+                            <Trash2 size={14} />
+                          </button>
+                      )}
+                    </button>
+                ))}
+              </div>
+          )}
+
+          {/* PRODUCTS TABLE */}
+          {hasAttributes && (
+              <div className={`rounded-[40px] shadow-2xl overflow-hidden border-4 border-white ${isAdmin ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                    <tr className={`text-[9px] font-black uppercase tracking-[0.2em] ${isAdmin ? 'bg-slate-900/50 text-slate-500' : 'bg-slate-50 text-slate-400'}`}>
+                      <th className="p-8">Продукт</th>
+                      <th className="p-8">Стоимость</th>
+                      {currentCategory.attributesConfig.map(attr => (
+                          <th key={attr.name} className="p-8">{attr.name}</th>
+                      ))}
+                      <th className="p-8 text-right">Детали</th>
+                    </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isAdmin ? 'divide-slate-700' : 'divide-slate-50'}`}>
+                    {currentAds.map(ad => (
+                        <tr
+                            key={ad.id}
+                            onClick={() => setSelectedAdId(ad.id)}
+                            className="group cursor-pointer hover:bg-blue-600/[0.03] transition-colors"
+                        >
+                          <td className="p-8">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                <Package size={20} />
+                              </div>
+                              <span className="font-black text-lg tracking-tight">{ad.title}</span>
+                            </div>
+                          </td>
+                          <td className="p-8">
+                        <span className="bg-blue-50 text-blue-600 px-4 py-2 rounded-2xl font-black text-sm">
+                            {ad.price.toLocaleString()} ₽
+                        </span>
+                          </td>
+                          {currentCategory.attributesConfig.map(attr => (
+                              <td key={attr.name} className="p-8">
+                                <span className="font-bold opacity-60 text-sm">{ad.attributes[attr.name] || '—'}</span>
+                              </td>
+                          ))}
+                          <td className="p-8 text-right">
+                            <div className="flex justify-end gap-3">
+                              <div className="p-3 bg-slate-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-600 hover:text-white">
+                                <ExternalLink size={18} />
+                              </div>
+                              {isAdmin && (
+                                  <button
+                                      onClick={(e) => { e.stopPropagation(); setAds(ads.filter(a => a.id !== ad.id)); }}
+                                      className="p-3 text-red-500 opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all rounded-2xl"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                    ))}
+                    </tbody>
+                  </table>
+                  {currentAds.length === 0 && (
+                      <div className="py-32 text-center">
+                        <Package className="mx-auto mb-6 opacity-10" size={80} strokeWidth={1} />
+                        <p className="font-black uppercase text-[10px] tracking-[0.3em] opacity-30">No inventory detected</p>
+                      </div>
+                  )}
+                </div>
+              </div>
+          )}
         </div>
       </div>
   );
