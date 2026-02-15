@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   ChevronRight, Home, Folder, Package,
   Settings, Eye, Trash2, FolderPlus, Tag, ListPlus,
-  CheckCircle2, ArrowLeft, ExternalLink, Plus
+  CheckCircle2, ArrowLeft, ExternalLink, Info
 } from 'lucide-react';
 
 // --- ИНИЦИАЛЬНЫЕ ДАННЫЕ ---
@@ -10,17 +10,11 @@ const generateInitialData = () => {
   const categories = [
     {
       id: 1,
-      name: "Электроника",
+      name: "Одежда",
       parent_id: null,
-      attributesConfig: []
-    },
-    {
-      id: 2,
-      name: "Смартфоны",
-      parent_id: 1,
       attributesConfig: [
-        { name: "Бренд", options: ["Apple", "Samsung", "Xiaomi"] },
-        { name: "Память", options: ["128GB", "256GB", "512GB"] }
+        { name: "Материал", options: ["Хлопок", "Шерсть", "Шелк"] },
+        { name: "Размер", options: ["S", "M", "L", "XL"] }
       ]
     }
   ];
@@ -30,12 +24,12 @@ const generateInitialData = () => {
 export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [categories, setCategories] = useState(() => {
-    const saved = localStorage.getItem('db_categories_v6');
+    const saved = localStorage.getItem('db_categories_v5');
     return saved ? JSON.parse(saved) : generateInitialData().categories;
   });
 
   const [ads, setAds] = useState(() => {
-    const saved = localStorage.getItem('db_ads_v6');
+    const saved = localStorage.getItem('db_ads_v5');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -43,8 +37,8 @@ export default function App() {
   const [selectedAdId, setSelectedAdId] = useState(null);
 
   useEffect(() => {
-    localStorage.setItem('db_categories_v6', JSON.stringify(categories));
-    localStorage.setItem('db_ads_v6', JSON.stringify(ads));
+    localStorage.setItem('db_categories_v5', JSON.stringify(categories));
+    localStorage.setItem('db_ads_v5', JSON.stringify(ads));
   }, [categories, ads]);
 
   // Хелперы
@@ -69,10 +63,10 @@ export default function App() {
 
   // --- ACTIONS ---
   const createCategory = () => {
-    if (!isAdmin) return; // Только для админа
+    if (!canCreateSubCategory) return alert("В категории с атрибутами нельзя создавать подкатегории.");
     const name = prompt("Название категории:");
     if (!name) return;
-    const isLeaf = window.confirm("Это конечная категория с фиксированными значениями?");
+    const isLeaf = window.confirm("Это конечная категория с фиксированными значениями характеристик?");
     let attributesConfig = [];
     if (isLeaf) {
       const attrsRaw = prompt("Формат: Цвет:Красный,Синий;Размер:S,M,L");
@@ -87,7 +81,6 @@ export default function App() {
   };
 
   const createAd = () => {
-    // Теперь доступно и в обычном режиме
     const title = prompt("Название товара:");
     const price = parseInt(prompt("Цена:"), 10);
     if (!title || isNaN(price)) return;
@@ -112,24 +105,24 @@ export default function App() {
     return (
         <div className={`min-h-screen p-4 md:p-8 ${isAdmin ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'}`}>
           <div className="max-w-4xl mx-auto">
-            <button onClick={() => setSelectedAdId(null)} className="flex items-center gap-2 mb-8 opacity-60 hover:opacity-100 transition-all font-black uppercase text-xs tracking-widest">
-              <ArrowLeft size={18} /> Вернуться в каталог
+            <button onClick={() => setSelectedAdId(null)} className="flex items-center gap-2 mb-8 opacity-60 hover:opacity-100 transition-all font-bold">
+              <ArrowLeft size={20} /> Назад к списку
             </button>
 
-            <div className={`grid grid-cols-1 md:grid-cols-2 gap-12 p-10 rounded-[48px] shadow-2xl ${isAdmin ? 'bg-slate-800' : 'bg-white'}`}>
-              <div className="aspect-square bg-slate-100 rounded-[32px] flex items-center justify-center text-slate-300 border-4 border-white">
-                <Package size={140} strokeWidth={1} />
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-8 p-8 rounded-[40px] shadow-2xl ${isAdmin ? 'bg-slate-800' : 'bg-white'}`}>
+              <div className="aspect-square bg-slate-100 rounded-3xl flex items-center justify-center text-slate-300">
+                <Package size={120} />
               </div>
-              <div className="flex flex-col">
-                <span className="bg-blue-600 text-white self-start px-3 py-1 rounded-full font-black uppercase tracking-tighter text-[9px] mb-4">Product Unit</span>
-                <h1 className="text-5xl font-black mb-2 tracking-tighter leading-none">{selectedAd.title}</h1>
-                <div className="text-4xl font-black text-blue-600 mb-10 tracking-tight">{selectedAd.price.toLocaleString()} ₽</div>
+              <div>
+                <span className="text-blue-500 font-black uppercase tracking-widest text-[10px]">Карточка товара</span>
+                <h1 className="text-4xl font-black mt-2 mb-4 tracking-tighter">{selectedAd.title}</h1>
+                <div className="text-3xl font-black text-blue-600 mb-8">{selectedAd.price.toLocaleString()} ₽</div>
 
-                <div className="space-y-2 mt-auto">
-                  <p className="font-black text-[10px] opacity-30 uppercase tracking-[0.2em] mb-4">Specifications</p>
+                <div className="space-y-3">
+                  <p className="font-bold text-xs opacity-40 uppercase tracking-widest">Характеристики</p>
                   {Object.entries(selectedAd.attributes).map(([k, v]) => (
-                      <div key={k} className={`flex justify-between items-center p-5 rounded-3xl border ${isAdmin ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
-                        <span className="opacity-40 font-bold text-sm uppercase tracking-tight">{k}</span>
+                      <div key={k} className={`flex justify-between p-4 rounded-2xl border ${isAdmin ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
+                        <span className="opacity-50 font-bold">{k}</span>
                         <span className="font-black text-blue-500">{v}</span>
                       </div>
                   ))}
@@ -143,98 +136,67 @@ export default function App() {
 
   return (
       <div className={`min-h-screen p-4 md:p-8 font-sans ${isAdmin ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-5xl mx-auto">
 
           {/* HEADER */}
-          <header className="flex justify-between items-center mb-10">
-            <div className="flex flex-col">
-              <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none">Store<span className="text-blue-500">Pro</span></h1>
-              <span className="text-[9px] font-black uppercase tracking-[0.3em] opacity-40 mt-1">Data Management System</span>
-            </div>
+          <header className="flex justify-between items-center mb-8">
+            <h1 className="text-xl font-black tracking-tighter uppercase italic">Store<span className="text-blue-500">Pro</span></h1>
             <button
                 onClick={() => setIsAdmin(!isAdmin)}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all ${
                     isAdmin ? 'bg-blue-600 text-white' : 'bg-white text-slate-900 shadow-sm border'
                 }`}
             >
-              {isAdmin ? <><Eye size={14}/> View Mode</> : <><Settings size={14}/> Admin Panel</>}
+              {isAdmin ? <><Eye size={14}/> Просмотр</> : <><Settings size={14}/> Админ</>}
             </button>
           </header>
 
           {/* NAVIGATION */}
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center mb-8">
-            <nav className={`flex-1 flex items-center gap-2 text-sm p-3.5 rounded-3xl shadow-sm overflow-x-auto ${isAdmin ? 'bg-slate-800' : 'bg-white'}`}>
-              <button onClick={() => setCurrentId(null)} className="p-1.5 opacity-40 hover:opacity-100 hover:text-blue-500 transition-all"><Home size={20}/></button>
-              {breadcrumbs.map(bc => (
-                  <React.Fragment key={bc.id}>
-                    <ChevronRight size={14} className="opacity-20 flex-shrink-0" />
-                    <button onClick={() => setCurrentId(bc.id)} className="hover:text-blue-500 px-2 font-black tracking-tight whitespace-nowrap">{bc.name}</button>
-                  </React.Fragment>
-              ))}
-            </nav>
+          <nav className={`flex items-center gap-2 text-sm p-3 rounded-2xl shadow-sm mb-6 overflow-x-auto ${isAdmin ? 'bg-slate-800' : 'bg-white'}`}>
+            <button onClick={() => setCurrentId(null)} className="p-1 opacity-50"><Home size={18}/></button>
+            {breadcrumbs.map(bc => (
+                <React.Fragment key={bc.id}>
+                  <ChevronRight size={14} className="opacity-20 flex-shrink-0" />
+                  <button onClick={() => setCurrentId(bc.id)} className="hover:text-blue-500 px-1 font-bold whitespace-nowrap">{bc.name}</button>
+                </React.Fragment>
+            ))}
+          </nav>
 
-            {/* Кнопка добавления товара в режиме ПРОСМОТРА */}
-            {canCreateAd && !isAdmin && (
-                <button
-                    onClick={createAd}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3.5 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-blue-500 shadow-lg shadow-blue-500/20 transition-all active:scale-95"
-                >
-                  <Plus size={18} /> Добавить товар
-                </button>
-            )}
-          </div>
-
-          {/* ADMIN ACTIONS */}
           {isAdmin && (
-              <div className="flex gap-3 mb-8">
+              <div className="flex gap-2 mb-8">
                 {canCreateSubCategory && (
-                    <button onClick={createCategory} className="flex-1 flex items-center justify-center gap-3 bg-slate-700 p-5 rounded-3xl font-black text-[10px] uppercase tracking-widest text-white hover:bg-slate-600 transition-all">
-                      <FolderPlus size={20} /> Создать новую подкатегорию
+                    <button onClick={createCategory} className="flex-1 flex items-center justify-center gap-2 bg-slate-700 p-4 rounded-2xl font-bold text-xs text-white hover:bg-slate-600 transition-all">
+                      <FolderPlus size={18} /> Новая папка
                     </button>
                 )}
                 {canCreateAd && (
-                    <button onClick={createAd} className="flex-1 flex items-center justify-center gap-3 bg-blue-600 p-5 rounded-3xl font-black text-[10px] uppercase tracking-widest text-white hover:bg-blue-500 transition-all">
-                      <ListPlus size={20} /> Новый товар по шаблону
+                    <button onClick={createAd} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 p-4 rounded-2xl font-bold text-xs text-white hover:bg-blue-500 transition-all">
+                      <ListPlus size={18} /> Добавить товар
                     </button>
                 )}
               </div>
           )}
 
-          {/* CONTENT */}
-          <div className="mb-4 flex items-end justify-between px-2">
-            <h2 className="text-4xl font-black tracking-tighter">
-              {currentCategory ? currentCategory.name : "Главный каталог"}
-            </h2>
-            {canCreateAd && (
-                <span className="text-[10px] font-black opacity-30 uppercase tracking-[0.2em]">Items: {currentAds.length}</span>
-            )}
-          </div>
-
-          {/* CATEGORIES GRID */}
+          {/* CATEGORIES LIST */}
           {!hasAttributes && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
                 {subCats.map(cat => (
                     <button
                         key={cat.id}
                         onClick={() => setCurrentId(cat.id)}
-                        className={`flex items-center justify-between p-7 rounded-[36px] transition-all border-2 border-transparent text-left relative group ${
-                            isAdmin ? 'bg-slate-800 hover:border-slate-600' : 'bg-white hover:shadow-2xl hover:border-blue-500/10'
+                        className={`flex items-center justify-between p-6 rounded-3xl transition-all border border-transparent text-left relative group ${
+                            isAdmin ? 'bg-slate-800 hover:border-slate-700' : 'bg-white hover:shadow-lg'
                         }`}
                     >
-                      <div className="flex items-center gap-5">
-                        <div className={`p-4 rounded-[24px] ${cat.attributesConfig?.length > 0 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-100 text-slate-400'}`}>
-                          {cat.attributesConfig?.length > 0 ? <Tag size={24}/> : <Folder size={24}/>}
+                      <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-2xl ${cat.attributesConfig?.length > 0 ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                          {cat.attributesConfig?.length > 0 ? <Tag size={20}/> : <Folder size={20}/>}
                         </div>
-                        <div className="flex flex-col">
-                          <span className="font-black text-xl tracking-tight leading-tight">{cat.name}</span>
-                          <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest mt-1">
-                        {cat.attributesConfig?.length > 0 ? 'Terminal Leaf' : 'Group Folder'}
-                    </span>
-                        </div>
+                        <span className="font-bold text-lg leading-tight">{cat.name}</span>
                       </div>
                       {isAdmin && (
-                          <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Удалить?")) setCategories(categories.filter(c => c.id !== cat.id)) }} className="absolute -right-1 -top-1 p-2.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 shadow-xl transition-all scale-75 group-hover:scale-100">
-                            <Trash2 size={14} />
+                          <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Удалить?")) setCategories(categories.filter(c => c.id !== cat.id)) }} className="absolute -right-1 -top-1 p-2 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg">
+                            <Trash2 size={12} />
                           </button>
                       )}
                     </button>
@@ -244,55 +206,47 @@ export default function App() {
 
           {/* PRODUCTS TABLE */}
           {hasAttributes && (
-              <div className={`rounded-[40px] shadow-2xl overflow-hidden border-4 border-white ${isAdmin ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}>
+              <div className={`rounded-3xl shadow-xl overflow-hidden border ${isAdmin ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                    <tr className={`text-[9px] font-black uppercase tracking-[0.2em] ${isAdmin ? 'bg-slate-900/50 text-slate-500' : 'bg-slate-50 text-slate-400'}`}>
-                      <th className="p-8">Продукт</th>
-                      <th className="p-8">Стоимость</th>
+                    <tr className={`text-[10px] font-black uppercase tracking-widest ${isAdmin ? 'bg-slate-900/50 text-slate-500' : 'bg-slate-50 text-slate-400'}`}>
+                      <th className="p-6">Наименование</th>
+                      <th className="p-6">Цена</th>
                       {currentCategory.attributesConfig.map(attr => (
-                          <th key={attr.name} className="p-8">{attr.name}</th>
+                          <th key={attr.name} className="p-6">{attr.name}</th>
                       ))}
-                      <th className="p-8 text-right">Детали</th>
+                      <th className="p-6 text-right">Действие</th>
                     </tr>
                     </thead>
-                    <tbody className={`divide-y ${isAdmin ? 'divide-slate-700' : 'divide-slate-50'}`}>
+                    <tbody className="divide-y divide-slate-100/5">
                     {currentAds.map(ad => (
                         <tr
                             key={ad.id}
                             onClick={() => setSelectedAdId(ad.id)}
-                            className="group cursor-pointer hover:bg-blue-600/[0.03] transition-colors"
+                            className="group cursor-pointer hover:bg-blue-500/5 transition-colors"
                         >
-                          <td className="p-8">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                <Package size={20} />
-                              </div>
-                              <span className="font-black text-lg tracking-tight">{ad.title}</span>
+                          <td className="p-6">
+                            <div className="flex items-center gap-3">
+                              <Package size={16} className="text-blue-500" />
+                              <span className="font-bold">{ad.title}</span>
                             </div>
                           </td>
-                          <td className="p-8">
-                        <span className="bg-blue-50 text-blue-600 px-4 py-2 rounded-2xl font-black text-sm">
-                            {ad.price.toLocaleString()} ₽
-                        </span>
-                          </td>
+                          <td className="p-6 font-black text-blue-600">{ad.price.toLocaleString()} ₽</td>
                           {currentCategory.attributesConfig.map(attr => (
-                              <td key={attr.name} className="p-8">
-                                <span className="font-bold opacity-60 text-sm">{ad.attributes[attr.name] || '—'}</span>
-                              </td>
+                              <td key={attr.name} className="p-6 opacity-60 text-sm">{ad.attributes[attr.name] || '—'}</td>
                           ))}
-                          <td className="p-8 text-right">
-                            <div className="flex justify-end gap-3">
-                              <div className="p-3 bg-slate-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-600 hover:text-white">
-                                <ExternalLink size={18} />
-                              </div>
+                          <td className="p-6 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button className="p-2 opacity-0 group-hover:opacity-100 transition-all hover:text-blue-500">
+                                <ExternalLink size={16} />
+                              </button>
                               {isAdmin && (
                                   <button
                                       onClick={(e) => { e.stopPropagation(); setAds(ads.filter(a => a.id !== ad.id)); }}
-                                      className="p-3 text-red-500 opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all rounded-2xl"
+                                      className="p-2 text-red-500 opacity-0 group-hover:opacity-100"
                                   >
-                                    <Trash2 size={18} />
+                                    <Trash2 size={16} />
                                   </button>
                               )}
                             </div>
@@ -302,9 +256,9 @@ export default function App() {
                     </tbody>
                   </table>
                   {currentAds.length === 0 && (
-                      <div className="py-32 text-center">
-                        <Package className="mx-auto mb-6 opacity-10" size={80} strokeWidth={1} />
-                        <p className="font-black uppercase text-[10px] tracking-[0.3em] opacity-30">No inventory detected</p>
+                      <div className="p-20 text-center opacity-20">
+                        <Package className="mx-auto mb-4" size={48} />
+                        <p className="font-black uppercase text-xs tracking-widest">Нет данных для отображения</p>
                       </div>
                   )}
                 </div>
