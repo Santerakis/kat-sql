@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronRight, Home, Folder, Package,
   Trash2, FolderPlus, Tag, ArrowLeft,
-  Image as ImageIcon, Upload, LogOut, User, Lock, ShieldCheck, PlusCircle
+  Image as ImageIcon, Upload, LogOut, User, Lock, ShieldCheck, PlusCircle, Layout
 } from 'lucide-react';
 
 const generateInitialData = () => {
@@ -38,6 +38,7 @@ export default function App() {
   const [authForm, setAuthForm] = useState({ login: '', password: '' });
   const [isAdminMode, setIsAdminMode] = useState(false);
   const fileInputRef = useRef(null);
+  const bannerInputRef = useRef(null);
 
   const [categories, setCategories] = useState(() => {
     const saved = localStorage.getItem('db_categories_v13');
@@ -49,6 +50,12 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [banners, setBanners] = useState(() => {
+    const saved = localStorage.getItem('db_banners_v1');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [currentBanner, setCurrentBanner] = useState(null);
   const [currentId, setCurrentId] = useState(null);
   const [selectedAdId, setSelectedAdId] = useState(null);
 
@@ -56,7 +63,37 @@ export default function App() {
     localStorage.setItem('db_categories_v13', JSON.stringify(categories));
     localStorage.setItem('db_ads_v13', JSON.stringify(ads));
     localStorage.setItem('current_user_v1', JSON.stringify(user));
-  }, [categories, ads, user]);
+    localStorage.setItem('db_banners_v1', JSON.stringify(banners));
+  }, [categories, ads, user, banners]);
+
+  // Логика ротации баннеров
+  useEffect(() => {
+    if (banners.length === 0) {
+      setCurrentBanner(null);
+      return;
+    }
+
+    const rotateBanner = () => {
+      const totalWeight = banners.reduce((acc, b) => acc + (Number(b.probability) || 0), 0);
+      if (totalWeight <= 0) {
+        setCurrentBanner(banners[Math.floor(Math.random() * banners.length)]);
+        return;
+      }
+
+      let random = Math.random() * totalWeight;
+      for (const banner of banners) {
+        if (random < banner.probability) {
+          setCurrentBanner(banner);
+          break;
+        }
+        random -= banner.probability;
+      }
+    };
+
+    rotateBanner();
+    const interval = setInterval(rotateBanner, 5000);
+    return () => clearInterval(interval);
+  }, [banners]);
 
   const mainCategories = useMemo(() => categories.filter(c => c.parent_id === null), [categories]);
   const subCats = useMemo(() => categories.filter(c => c.parent_id === currentId), [categories, currentId]);
@@ -120,6 +157,24 @@ export default function App() {
     setCategories([...categories, { id: Date.now(), name, parent_id: currentId, attributesConfig }]);
   };
 
+  const onBannerUpload = async (e) => {
+    if (!e.target.files.length) return;
+    const prob = prompt("Введите вероятность показа (от 1 до 100):", "50");
+    if (!prob || isNaN(prob)) { alert("Некорректная вероятность"); return; }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setBanners([...banners, {
+        id: Date.now(),
+        image: reader.result,
+        probability: parseInt(prob, 10),
+        author: user.login
+      }]);
+    };
+    reader.readAsDataURL(e.target.files[0]);
+    e.target.value = '';
+  };
+
   const onFileChange = async (e) => {
     if (!e.target.files.length) return;
     const title = prompt("Название товара:");
@@ -175,11 +230,25 @@ export default function App() {
     );
   }
 
+  // Боковой баннер
+  const renderBanner = () => {
+    if (!currentBanner || currentId === null || isAdminMode || user.role === 'admin') return null;
+    return (
+        <div className="fixed right-4 top-24 w-48 hidden xl:block animate-in fade-in slide-in-from-right-4 duration-500">
+          <div className="bg-white p-2 rounded-3xl shadow-xl border border-slate-100">
+            <img src={currentBanner.image} className="w-full h-auto rounded-2xl mb-2" alt="Promo" />
+            <div className="text-[10px] font-bold text-center text-slate-400 uppercase tracking-tighter">Рекламный блок</div>
+          </div>
+        </div>
+    );
+  };
+
   if (selectedAd) {
     const isOwner = selectedAd.author === user.login || user.role === 'admin';
     return (
         <div className={`min-h-screen p-4 md:p-8 ${isAdminMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'}`}>
-          <div className="max-w-5xl mx-auto">
+          <div className="max-w-5xl mx-auto relative">
+            {renderBanner()}
             <button onClick={() => setSelectedAdId(null)} className="flex items-center gap-2 mb-8 font-bold opacity-60"><ArrowLeft size={20} /> Назад</button>
             <div className={`grid grid-cols-1 lg:grid-cols-2 gap-8 p-8 rounded-[40px] shadow-2xl ${isAdminMode ? 'bg-slate-800' : 'bg-white'}`}>
               <div className="grid grid-cols-2 gap-3">
@@ -213,7 +282,8 @@ export default function App() {
 
   return (
       <div className={`min-h-screen p-4 md:p-8 ${isAdminMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-5xl mx-auto relative">
+          {renderBanner()}
           <header className="flex justify-between items-center mb-8">
             <h1 className="text-xl font-black uppercase italic">Store<span className="text-blue-500">Pro</span></h1>
             <div className="flex items-center gap-4">
@@ -245,9 +315,14 @@ export default function App() {
             {breadcrumbs.map(bc => <React.Fragment key={bc.id}><ChevronRight size={14} className="opacity-20" /><button onClick={() => setCurrentId(bc.id)} className="font-bold">{bc.name}</button></React.Fragment>)}
           </nav>
 
-          <div className="mb-8">
+          <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
             {isAdminMode && canCreateSubCategory && <button onClick={createCategory} className="w-full bg-slate-700 p-4 rounded-2xl font-bold text-xs text-white">Создать подкатегорию</button>}
             {canCreateAd && <button onClick={() => fileInputRef.current.click()} className="w-full bg-blue-600 p-4 rounded-2xl font-bold text-xs text-white shadow-lg shadow-blue-500/20">Разместить свой товар</button>}
+            {currentId !== null && (
+                <button onClick={() => bannerInputRef.current.click()} className="w-full bg-orange-500 p-4 rounded-2xl font-bold text-xs text-white shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2">
+                  <Layout size={16} /> Добавить фото-баннер
+                </button>
+            )}
           </div>
 
           {!hasAttributes ? (
@@ -333,7 +408,8 @@ export default function App() {
               </div>
           )}
         </div>
-        <input type="file" ref={fileInputRef} style={{ display: 'none', position: 'absolute' }} multiple accept="image/*" onChange={onFileChange} />
+        <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple accept="image/*" onChange={onFileChange} />
+        <input type="file" ref={bannerInputRef} style={{ display: 'none' }} accept="image/*" onChange={onBannerUpload} />
       </div>
   );
 }
